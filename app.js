@@ -111,14 +111,7 @@ app.get('/api/neighbourhood', function (req, res){
 app.get('/api/neighbourhood/:latitude/:longitude', function (req, res){
   return NeighbourhoodModel.find({}, function (err, neighbourhood) {
     if (!err) {
-      var hoods = [];
-      for (var key in neighbourhood) {
-        var hood = neighbourhood[key];
-        if (inBox.getNeighbourhood(req.params.latitude, req.params.longitude, hood)) {
-          hoods.push(hood.properties[0].HOOD);
-        }
-      }
-      return res.send(hoods);
+      return res.send(inBox.getNeighbourhood(req.params.longitude, req.params.latitude, neighbourhood));
     } else {
       return res.send(err);
     }
@@ -128,4 +121,3 @@ app.get('/api/neighbourhood/:latitude/:longitude', function (req, res){
 // Launch server
 
 app.listen(4242);
-

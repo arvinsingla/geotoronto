@@ -3,53 +3,49 @@
 
 module.exports = {
 
-    getNeighbourhood: function (x, y, neighbourhood) {
+    getNeighbourhood: function (longitude, latitude, neighbourhoods, noLogging) {
         'use strict';
 
-        function Point(x, y) {
-            if (Object.prototype.toString.call(x) === '[object Array]') {
-                this.x = x[1];
-                this.y = x[0];
+        function Point(longitude, latitude) {
+            if (Object.prototype.toString.call(longitude) === '[object Array]') {
+                this.longitude = longitude[0];
+                this.latitude = longitude[1];
             } else {
-                this.x = x;
-                this.y = y;
+                this.longitude = longitude;
+                this.latitude = latitude;
             }
         }
 
-        function Line(point1, point2) {
-            this.point1 = point1;
-            this.point2 = point2;
+        function Line(pointA, pointB) {
+            this.pointA = pointA;
+            this.pointB = pointB;
         }
      
-        function findMaxY() {
-            var maxY;
-            neighbourhood.geometry[0].coordinates[0].forEach(function (coordinate) {
-                var p = new Point(coordinate);
-                if (typeof maxY === 'undefined' || p.y > maxY) {
-                    maxY = p.Y;
-                }
+        function findMaxLong() {
+            var longPoint = new Point(neighbourhoods[0].geometry[0].coordinates[0][1]).longitude ;
+            /*var maxLong;
+            
+            neighbourhoods.forEach(function (neighbourhood) {
+                neighbourhood.geometry.coordinates[0].forEach(function (coordinate) {
+                    var p = new Point(coordinate);
+                    if (typeof maxLong === 'undefined' || p.longitude > maxLong) {
+                        maxLong = p.longitude;
+                    }
+                });
             });
+            log('Highest longtitude in all neighbourhoods is ' + maxLong);
 
-            return maxY || 0;
+            return maxLong || 0;*/
         }
-
-           
-        var point = new Point(x, y),
-            neighbourhoodRet,
-            maxY = findMaxY();
-
-        function lineFromPoint(point) {
-            return new Line(point, new Point(point.x, maxY));
-        }
-
-        function lineCrossesLine(lineA, lineB) {
-            var a1 = lineA.point1,
-                a2 = lineA.point2,
-                b1 = lineB.point1,
-                b2 = lineB.point2,
-                aCrossProduct = (b2.x - b1.x) * (a1.y - b1.y) - (b2.y - b1.y) * (a1.x - b1.x),
-                bCrossProduct = (a2.x - a1.x) * (a1.y - b1.y) - (a2.y - a1.y) * (a1.x - b1.x),
-                normalFactor  = (b2.y - b1.y) * (a2.x - a1.x) - (b2.x - b1.x) * (a2.y - a1.y),
+        
+        function lineCrossesLine(line1, line2) {
+            var a1 = line1.pointA,
+                a2 = line1.pointB,
+                b1 = line2.pointA,
+                b2 = line2.pointB,
+                aCrossProduct = (b2.longitude - b1.longitude) * (a1.latitude - b1.latitude) - (b2.latitude - b1.latitude) * (a1.longitude - b1.longitude),
+                bCrossProduct = (a2.longitude - a1.longitude) * (a1.latitude - b1.latitude) - (a2.latitude - a1.latitude) * (a1.longitude - b1.longitude),
+                normalFactor  = (b2.latitude - b1.latitude) * (a2.longitude - a1.longitude) - (b2.longitude - b1.longitude) * (a2.latitude - a1.latitude),
                 aNormalized,
                 bNormalized;
 
@@ -60,47 +56,73 @@ module.exports = {
                 return aNormalized > 0 && aNormalized <= 1 && bNormalized > 0 && bNormalized <= 1;
             }
             
-            //lines are coincident   ie lineA is a ontop lineB or vice versa 
+            //lines are coincident  ie lineA is a ontop lineB or vice versa 
             return !aCrossProduct || !bCrossProduct;
         }
 
-        function projectionCrossesLine(point, line) {
-            var projection = lineFromPoint(point);
-            return lineCrossesLine(line, projection);
+        function log(msg, important) {
+            if (!noLogging || important) {
+                console.log(msg);
+            }
         }
 
-        var previous = null,
-            edges = [],
-            count = 0;
+        var point = new Point(longitude, latitude),
+            maxLong = -78.882437, // A point in Oshawa
+            neighbourhood,
+            hood,
+            hoods = [],
+            count,
+            coordinates,
+            coordinate,
+            isOdd,
+            len,
+            previous;
 
-        neighbourhood.geometry[0].coordinates[0].forEach(function (coordinate) {
-            if (previous) {
-                edges.push(new Line(new Point(previous), new Point(coordinate)));
-            }
-            previous = coordinate;
-        });
-
-        edges.forEach(function (edge) {
-            if (projectionCrossesLine(point, edge)) {
-                count = count + 1;
-            }
-        });
-
-        console.log(neighbourhood.properties[0].HOOD + ": " + count);
-
-        if (count % 2) {
-            neighbourhoodRet = neighbourhood.properties[0].HOOD;
-            //return console.log('Your point is in ' + neighbourhoodRet);
-            return true;
-        }
-
-        if (!neighbourhoodRet) {
-            //console.log("Neibourhood could not be detected");
-            return false;
+        function rayFromPoint(point) {
+            return new Line(point, new Point(maxLong, point.latitude));
         }
         
-        return neighbourhoodRet;
+        function rayCrossesLine(point, line) {
+            return lineCrossesLine(rayFromPoint(point), line);
+        }
+
+        //logic starts here
+        for (hood in neighbourhoods) {
+            if (neighbourhoods.hasOwnProperty(hood)) {
+                neighbourhood = neighbourhoods[hood];
+                coordinates = neighbourhood.geometry[0].coordinates[0];
+
+                //find all the edges in each neighbourhood
+                len = coordinates.length;
+                count = 0;
+                while (len--) {
+                    //for each edge in the neighbourhood, draw a ray from the point in an arbitrariy direction, and see if we cross that edge
+                    coordinate = coordinates[len];
+                    if (previous && rayCrossesLine(point, new Line(new Point(previous), new Point(coordinate)))) {
+                        count++;
+                    }
+                    previous = coordinate;
+                }
+
+                //we've found the neighbourhood if we've crossed an odd number of edges in any of the neighbourhoods
+                //see: http://www.yaldex.com/game-programming/0131020099_ch22lev1sec1.html#ch22fig04
+                isOdd = count % 2;
+                log('Your point had ' + count + ' intersection' + (count > 1 ? 's' : '') + ', that means it is' + (isOdd ? '' : ' not') + ' in ' + neighbourhood.properties[0].HOOD, isOdd);
+                if (isOdd) {
+                    hoods.push(neighbourhood.properties[0].HOOD);
+                }
+            }
+        }
+
+        if (hoods.length) {
+            return hoods;
+        }
+        else {
+            log('Neibourhood could not be detected', true);
+            return false;
+        }
     }
+
 };
 
 /*
